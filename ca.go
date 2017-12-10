@@ -47,6 +47,20 @@ type CertificateAuthority struct {
 	store map[string]*tls.Certificate
 }
 
+// NewCertificateAuthority returns a certificate authority.
+// First, we attempt to loads a CA from the ca.pem and ca-key.pem files.
+// If this does not succeed, we generate a new CA and save it to disk.
+func NewCertificateAuthority() *CertificateAuthority {
+	ca, err := CertificateAuthorityFromFile()
+	if err != nil {
+		ca, err = CertificateAuthorityFromScratch()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	return ca
+}
+
 // CertificateAuthorityFromScratch generates a certificate authority and
 // saves the private key and certificate pair to disk.
 func CertificateAuthorityFromScratch() (*CertificateAuthority, error) {

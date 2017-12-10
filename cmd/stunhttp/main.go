@@ -18,8 +18,6 @@ func panicIfErr(err error) {
 }
 
 func main() {
-	var ca *stun.CertificateAuthority
-
 	flagAddr := flag.String("proxy", "http://127.0.0.1:8000", "address to proxy to (e.g. http://127.0.0.1:8000)")
 	flagListen := flag.String("listen", "127.0.0.1:4443", "address to listen on (e.g. 127.0.0.1:4443)")
 	flag.Parse()
@@ -27,11 +25,7 @@ func main() {
 	addr, err := url.Parse(*flagAddr)
 	panicIfErr(err)
 
-	ca, err = stun.CertificateAuthorityFromFile()
-	if err != nil {
-		ca, err = stun.CertificateAuthorityFromScratch()
-		panicIfErr(err)
-	}
+	ca := stun.NewCertificateAuthority()
 
 	l, err := tls.Listen("tcp", *flagListen, &tls.Config{
 		GetCertificate: ca.GetCertificate,
