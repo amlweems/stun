@@ -20,9 +20,11 @@ func panicIfErr(err error) {
 func main() {
 	flagAddr := flag.String("proxy", "127.0.0.1:8000", "address to proxy to (e.g. 127.0.0.1:8000)")
 	flagListen := flag.String("listen", "127.0.0.1:4443", "address to listen on (e.g. 127.0.0.1:4443)")
+	flagFallback := flag.String("fallback", "*.example.org", "fallback in case SNI is not sent")
 	flag.Parse()
 
 	ca := stun.NewCertificateAuthority()
+	ca.DefaultServerName = *flagFallback
 
 	l, err := tls.Listen("tcp", *flagListen, &tls.Config{
 		GetCertificate: ca.GetCertificate,

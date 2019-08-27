@@ -20,9 +20,6 @@ var (
 	// sign certificates for 10 years in the past -> 10 years in the future
 	notBefore = time.Now().Add(-10 * 365 * 24 * time.Hour)
 	notAfter  = time.Now().Add(10 * 365 * 24 * time.Hour)
-
-	// fallback domain if SNI is empty
-	defaultServerName = "*.praetorianlabs.com"
 )
 
 func pemBlockForKey(priv interface{}) *pem.Block {
@@ -45,6 +42,9 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 type CertificateAuthority struct {
 	cert  tls.Certificate
 	store map[string]*tls.Certificate
+
+	// DefaultServerName is the fallback name is the client does not send an SNI
+	DefaultServerName string
 }
 
 // NewCertificateAuthority returns a certificate authority.
@@ -81,8 +81,8 @@ func CertificateAuthorityFromScratch() (*CertificateAuthority, error) {
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Praetorian"},
-			CommonName:   "Praetorian CA",
+			Organization: []string{"Stun"},
+			CommonName:   "Stun CA",
 		},
 
 		NotBefore: notBefore,
@@ -90,7 +90,7 @@ func CertificateAuthorityFromScratch() (*CertificateAuthority, error) {
 
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 	}
 
 	// self sign the generated certificate
@@ -141,7 +141,7 @@ func CertificateAuthorityFromFile() (*CertificateAuthority, error) {
 func (ca *CertificateAuthority) GetCertificate(h *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	// fallback to default it SNI is empty
 	if h.ServerName == "" {
-		h.ServerName = defaultServerName
+		h.ServerName = ca.DefaultServerName
 	}
 	log.Printf("%s -> %s", h.Conn.RemoteAddr(), h.ServerName)
 
@@ -167,7 +167,7 @@ func (ca *CertificateAuthority) GetCertificate(h *tls.ClientHelloInfo) (*tls.Cer
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Praetorian"},
+			Organization: []string{"Stun"},
 			CommonName:   h.ServerName,
 		},
 
