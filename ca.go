@@ -51,7 +51,7 @@ type CertificateAuthority struct {
 // First, we attempt to loads a CA from the ca.pem and ca-key.pem files.
 // If this does not succeed, we generate a new CA and save it to disk.
 func NewCertificateAuthority() *CertificateAuthority {
-	ca, err := CertificateAuthorityFromFile()
+	ca, err := CertificateAuthorityFromFile("ca.pem", "ca-key.pem")
 	if err != nil {
 		ca, err = CertificateAuthorityFromScratch()
 		if err != nil {
@@ -118,19 +118,19 @@ func CertificateAuthorityFromScratch() (*CertificateAuthority, error) {
 	log.Printf("wrote private key to ca-key.pem")
 
 	// return the certificate authority by reading from disk
-	return CertificateAuthorityFromFile()
+	return CertificateAuthorityFromFile("ca.pem", "ca-key.pem")
 }
 
 // CertificateAuthorityFromFile loads a certificate authority from disk.
-func CertificateAuthorityFromFile() (*CertificateAuthority, error) {
-	cert, err := tls.LoadX509KeyPair("ca.pem", "ca-key.pem")
+func CertificateAuthorityFromFile(cert, key string) (*CertificateAuthority, error) {
+	ca, err := tls.LoadX509KeyPair(cert, key)
 	if err != nil {
 		return nil, err
 	}
-	pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
+	pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: ca.Certificate[0]})
 
 	return &CertificateAuthority{
-		cert:  cert,
+		cert:  ca,
 		store: make(map[string]*tls.Certificate),
 	}, nil
 }
