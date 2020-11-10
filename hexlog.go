@@ -1,7 +1,6 @@
 package stun
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"io"

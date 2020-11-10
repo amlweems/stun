@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	// sign certificates for 10 years in the past -> 10 years in the future
-	notBefore = time.Now().Add(-10 * 365 * 24 * time.Hour)
-	notAfter  = time.Now().Add(10 * 365 * 24 * time.Hour)
+	// sign 1 year certificates
+	notBefore = time.Now()
+	notAfter  = time.Now().Add(365 * 24 * time.Hour)
 )
 
 func pemBlockForKey(priv interface{}) *pem.Block {

@@ -23,17 +23,33 @@ var (
 	}
 )
 
+var (
+	flagMirror     bool
+	flagAddr       string
+	flagListenAddr string
+	flagListenPort string
+	flagFallback   string
+	flagTLS        bool
+)
+
 func main() {
-	flagAddr := flag.String("proxy", "127.0.0.1:8000", "address to proxy to (e.g. 127.0.0.1:8000)")
-	flagListen := flag.String("listen", "127.0.0.1:4443", "address to listen on (e.g. 127.0.0.1:4443)")
-	flagFallback := flag.String("fallback", "*.example.org", "fallback in case SNI is not sent")
-	flagTLS := flag.Bool("tls", false, "proxy to a TLS service")
+	flag.BoolVar(&flagMirror, "mirror", true, "mirror traffic based on ServerName")
+	flag.StringVar(&flagAddr, "proxy", "", "address to proxy to (e.g. example.org:443)")
+	flag.StringVar(&flagListenAddr, "listen", "0.0.0.0", "address to listen on")
+	flag.StringVar(&flagListenPort, "port", "443", "port to listen on")
+	flag.StringVar(&flagFallback, "fallback", "*.example.org", "fallback in case SNI is not sent")
+	flag.BoolVar(&flagTLS, "tls", true, "proxy to a TLS service")
 	flag.Parse()
 
-	ca := stun.NewCertificateAuthority()
-	ca.DefaultServerName = *flagFallback
+	if flagMirror && flagAddr != "" {
+		log.Printf("proxy address specified, disabling mirroring")
+		flagMirror = false
+	}
 
-	l, err := tls.Listen("tcp", *flagListen, &tls.Config{
+	ca := stun.NewCertificateAuthority()
+	ca.DefaultServerName = flagFallback
+
+	l, err := tls.Listen("tcp", flagListenAddr+":"+flagListenPort, &tls.Config{
 		GetCertificate: ca.GetCertificate,
 	})
 	panicIfErr(err)
@@ -43,6 +59,24 @@ func main() {
 		// Wait for a connection.
 		conn, err := l.Accept()
 		panicIfErr(err)
+
+		// Convert conn to tls.Conn
+		tlsconn := conn.(*tls.Conn)
+
+		// Ensure the TLS handshake has completed before moving on
+		err = tlsconn.Handshake()
+		if err != nil {
+			conn.Close()
+			log.Printf("error in tls handshake: %s", err)
+			continue
+		}
+
+		target := flagAddr
+		if flagMirror {
+			state := tlsconn.ConnectionState()
+			target = state.ServerName + ":" + flagListenPort
+		}
+		log.Printf("proxying traffic to %s", target)
 
 		inject, err := net.Listen("tcp", "0.0.0.0:0")
 		panicIfErr(err)
@@ -54,14 +88,17 @@ func main() {
 			var err error
 
 			// connect to proxy address (optionally using TLS)
-			if *flagTLS {
-				proxy, err = tls.Dial("tcp", *flagAddr, insecureConfig)
+			if flagTLS {
+				proxy, err = tls.Dial("tcp", target, insecureConfig)
 			} else {
-				proxy, err = net.Dial("tcp", *flagAddr)
+				proxy, err = net.Dial("tcp", target)
 			}
 
 			if err != nil {
 				log.Print(err)
+				inject.Close()
+				c.Close()
+				return
 			}
 
 			// Close the connection once.
