@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/pem"
 	"flag"
 	"io"
 	"log"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/amlweems/stun"
@@ -30,6 +32,10 @@ var (
 	flagListenPort string
 	flagFallback   string
 	flagTLS        bool
+	flagServerCert string
+	flagServerKey  string
+	flagClientCert string
+	flagClientKey  string
 )
 
 func main() {
@@ -39,6 +45,10 @@ func main() {
 	flag.StringVar(&flagListenPort, "port", "443", "port to listen on")
 	flag.StringVar(&flagFallback, "fallback", "*.example.org", "fallback in case SNI is not sent")
 	flag.BoolVar(&flagTLS, "tls", true, "proxy to a TLS service")
+	flag.StringVar(&flagServerCert, "server-cert", "", "path to server certificate")
+	flag.StringVar(&flagServerKey, "server-key", "", "path to server key")
+	flag.StringVar(&flagClientCert, "client-cert", "", "path to client certificate")
+	flag.StringVar(&flagClientKey, "client-key", "", "path to client key")
 	flag.Parse()
 
 	if flagMirror && flagAddr != "" {
@@ -46,12 +56,25 @@ func main() {
 		flagMirror = false
 	}
 
-	ca := stun.NewCertificateAuthority()
-	ca.DefaultServerName = flagFallback
+	if flagClientCert != "" && flagClientKey != "" {
+		cert, err := tls.LoadX509KeyPair(flagClientCert, flagClientKey)
+		panicIfErr(err)
+		insecureConfig.Certificates = []tls.Certificate{cert}
+	}
 
-	l, err := tls.Listen("tcp", flagListenAddr+":"+flagListenPort, &tls.Config{
-		GetCertificate: ca.GetCertificate,
-	})
+	config := &tls.Config{
+		ClientAuth: tls.RequestClientCert,
+	}
+	if flagServerCert != "" && flagServerKey != "" {
+		cert, err := tls.LoadX509KeyPair(flagServerCert, flagServerKey)
+		panicIfErr(err)
+		config.Certificates = []tls.Certificate{cert}
+	} else {
+		ca := stun.NewCertificateAuthority()
+		ca.DefaultServerName = flagFallback
+		config.GetCertificate = ca.GetCertificate
+	}
+	l, err := tls.Listen("tcp", flagListenAddr+":"+flagListenPort, config)
 	panicIfErr(err)
 
 	defer l.Close()
@@ -72,8 +95,12 @@ func main() {
 		}
 
 		target := flagAddr
+		state := tlsconn.ConnectionState()
+		for _, peer := range state.PeerCertificates {
+			log.Printf("peer: %s", peer.Subject.String())
+			pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: peer.Raw})
+		}
 		if flagMirror {
-			state := tlsconn.ConnectionState()
 			target = state.ServerName + ":" + flagListenPort
 		}
 		log.Printf("proxying traffic to %s", target)
